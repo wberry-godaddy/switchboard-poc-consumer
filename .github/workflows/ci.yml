@@ -25,7 +25,7 @@ jobs:
         run: |
           MOD="$(go env GOMODCACHE)/github.com/wberry-godaddy/switchboard-poc-natives"
           echo "Module cache contents:"; find "$MOD" -maxdepth 1
-          test -d "$MOD/linux@v0.2.1" || { echo "::error::expected linux present"; exit 1; }
+          test -d "$MOD/linux@v0.2.2" || { echo "::error::expected linux present"; exit 1; }
           for wrong in linux-musl darwin windows; do
             find "$MOD" -maxdepth 1 -name "$wrong@*" | grep -q . && { echo "::error::unexpected $wrong module was downloaded"; exit 1; }
           done
@@ -45,7 +45,7 @@ jobs:
         run: |
           MOD="$(go env GOMODCACHE)/github.com/wberry-godaddy/switchboard-poc-natives"
           echo "Module cache contents:"; find "$MOD" -maxdepth 1
-          test -d "$MOD/linux-musl@v0.2.1" || { echo "::error::expected linux-musl present"; exit 1; }
+          test -d "$MOD/linux-musl@v0.2.2" || { echo "::error::expected linux-musl present"; exit 1; }
           for wrong in linux darwin windows; do
             find "$MOD" -maxdepth 1 -name "$wrong@*" | grep -q . && { echo "::error::unexpected $wrong module was downloaded"; exit 1; }
           done
@@ -72,7 +72,7 @@ jobs:
         run: |
           MOD="$(go env GOMODCACHE)/github.com/wberry-godaddy/switchboard-poc-natives"
           echo "Module cache contents:"; find "$MOD" -maxdepth 1
-          test -d "$MOD/linux-musl@v0.2.1" || { echo "::error::expected linux-musl present"; exit 1; }
+          test -d "$MOD/linux-musl@v0.2.2" || { echo "::error::expected linux-musl present"; exit 1; }
           for wrong in linux darwin windows; do
             find "$MOD" -maxdepth 1 -name "$wrong@*" | grep -q . && { echo "::error::unexpected $wrong module was downloaded"; exit 1; }
           done
@@ -92,7 +92,7 @@ jobs:
         run: |
           MOD="$(go env GOMODCACHE)/github.com/wberry-godaddy/switchboard-poc-natives"
           echo "Module cache contents:"; find "$MOD" -maxdepth 1
-          test -d "$MOD/darwin@v0.2.1" || { echo "::error::expected darwin present"; exit 1; }
+          test -d "$MOD/darwin@v0.2.2" || { echo "::error::expected darwin present"; exit 1; }
           for wrong in linux linux-musl windows; do
             find "$MOD" -maxdepth 1 -name "$wrong@*" | grep -q . && { echo "::error::unexpected $wrong module was downloaded"; exit 1; }
           done
@@ -113,14 +113,14 @@ jobs:
         run: |
           MOD="$(go env GOMODCACHE)/github.com/wberry-godaddy/switchboard-poc-natives"
           echo "Module cache contents:"; find "$MOD" -maxdepth 1
-          test -d "$MOD/windows@v0.2.1" || { echo "::error::expected windows present"; exit 1; }
+          test -d "$MOD/windows@v0.2.2" || { echo "::error::expected windows present"; exit 1; }
           for wrong in linux linux-musl darwin; do
             find "$MOD" -maxdepth 1 -name "$wrong@*" | grep -q . && { echo "::error::unexpected $wrong module was downloaded"; exit 1; }
           done
           # native.dll has no rpath equivalent on Windows; it must be
           # resolvable via PATH at runtime, mirroring the real repo's own CI
           # step that prepends bin/x64-win32 to PATH.
-          cp "$MOD/windows@v0.2.1/lib/native.dll" .
+          cp "$MOD/windows@v0.2.2/lib/native.dll" .
           OUT="$(./out.exe)"
           [ "$OUT" = "5" ] || { echo "::error::expected output 5, got $OUT"; exit 1; }
           echo "PASS: only windows module fetched; real dynamic cgo call returned 5"
@@ -142,6 +142,6 @@ jobs:
           MOD="$(go env GOMODCACHE)/github.com/wberry-godaddy/switchboard-poc-natives"
           echo "Module cache contents:"; find "$MOD" -maxdepth 1
           for p in linux linux-musl darwin windows; do
-            test -d "$MOD/$p@v0.2.1" || { echo "::error::expected $p present after tidy"; exit 1; }
+            test -d "$MOD/$p@v0.2.2" || { echo "::error::expected $p present after tidy"; exit 1; }
           done
           echo "PASS (control case): tidy fetched all 4, as documented -- contrast with the build jobs above"
