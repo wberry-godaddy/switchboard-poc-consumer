@@ -38,17 +38,53 @@ module (15/20/25/30MB respectively, deliberately distinct sizes) was
 downloaded -- and explicitly fails the job if any other platform's module
 shows up.
 
-A fifth job (`tidy-control`) runs plain `go mod tidy` with no target-specific
+A sixth job (`tidy-control`) runs plain `go mod tidy` with no target-specific
 tags as a deliberate contrast: it fetches **all four** modules, documenting
 that the win applies to `go build`/`go get`/`go mod download`, not to
 `tidy`/`vendor`.
 
-Reproduced locally (clean `GOPATH` per run) before pushing CI, e.g.:
+## Phase 1: real cgo linking (dynamic *and* static)
+
+Phase 0 (module-fetch selectivity) says nothing about whether actual cgo
+linking still works once the C artifacts live inside a dependency module's
+read-only `GOMODCACHE` directory rather than the main module's own `lib/`.
+So the native packages now ship a real tiny C library (`int add(int, int)`)
+instead of inert marker files, and each build-tag-gated file
+(`native_linux.go`, etc.) calls through to it and prints the result -- a
+passing run proves the native code actually *executed*, not just compiled.
+
+This directly targets the exact regression from
+[#585](https://github.com/gdcorp-uxp/switchboard-client/pull/585) /
+[#590](https://github.com/gdcorp-uxp/switchboard-client/pull/590): #585
+pruned `libnative.a`-equivalent static archives assuming the Go client only
+links dynamically; #590 restored them because static builds
+(`--tags musl --ldflags '-linkmode external -extldflags "-static"'`, the
+Alpine/Lambda deploy shape the Domains org depends on) resolve `-lnative`
+against the `.a`, not the `.so` -- and without it in the same `-L` directory,
+linking fails with `ld: cannot find -lnative`. The `linux-musl` native module
+ships *both* `libnative.so` and `libnative.a` in one `lib/` dir, and the
+*same* single `#cgo LDFLAGS` line must work for both cases.
+
+The `linux-musl-static` CI job reproduces this exact scenario, but through a
+dependency module instead of the main module's own `lib/` directory:
 
 ```
-$ GOOS=linux GOARCH=amd64 go build .
-go: downloading .../switchboard-poc-natives/linux v0.1.0
-$ du -sh $(go env GOMODCACHE)/github.com/wberry-godaddy/switchboard-poc-natives/*
- 15M .../linux@v0.1.0
-# linux-musl (20M), darwin (25M), windows (30M) -- absent
+$ go build -tags musl --ldflags '-linkmode external -extldflags "-static"' -o /tmp/out .
+$ /tmp/out
+5
+$ file /tmp/out
+/tmp/out: ELF 64-bit LSB executable, ARM aarch64, ..., statically linked, ...
+$ ldd /tmp/out
+/lib/ld-musl-aarch64.so.1: /tmp/out: Not a valid dynamic program
 ```
+
+Static linking against a `.a` shipped inside a *dependency* module works
+identically to the main module's own `lib/` directory -- the multi-module
+restructuring does not reopen the #590 regression.
+
+All five other jobs (`linux-glibc-dynamic`, `linux-musl-dynamic`,
+`darwin-dynamic`, `windows-dynamic`, `tidy-control`) additionally assert the
+program's output is `5` and that the binary is linked the expected way
+(`ldd`/`otool -L` shows the dynamic library; Windows confirmed locally via
+`objdump -p`, which shows `native.dll` as an import with the `add` symbol
+bound).

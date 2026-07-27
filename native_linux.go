@@ -2,4 +2,6 @@
 
 package main
 
-import _ "github.com/wberry-godaddy/switchboard-poc-natives/linux"
+import "github.com/wberry-godaddy/switchboard-poc-natives/linux"
+
+func nativeAdd(a, b int) int { return linux.Add(a, b) }

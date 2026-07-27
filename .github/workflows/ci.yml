@@ -1,4 +1,4 @@
-name: Selective native module fetch proof
+name: Selective native module fetch + real cgo linking proof
 
 on:
   push:
@@ -7,89 +7,123 @@ on:
 
 jobs:
   # Each of these builds for one specific target from a totally fresh module
-  # cache (every GitHub Actions runner starts clean), then asserts that only
-  # the ONE matching native module (out of four: linux 15MB, linux-musl 20MB,
-  # darwin 25MB, windows 30MB) was actually downloaded into GOMODCACHE.
-  linux-default:
+  # cache (every GitHub Actions runner starts clean), then asserts:
+  #   1. only the ONE matching native module was actually downloaded into
+  #      GOMODCACHE (Phase 0 proof: selective module fetch)
+  #   2. the built binary actually runs and prints 5 (2+3 via a real cgo call
+  #      into a real C library shipped inside that dependency module -- not
+  #      just a successful compile)
+  #   3. the binary is linked the expected way (dynamic vs. static)
+  linux-glibc-dynamic:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with: { go-version: "1.22" }
       - run: go build -o /tmp/out .
-      - name: Assert only 'linux' module present
+      - name: Assert module fetch + real dynamic execution
         run: |
           MOD="$(go env GOMODCACHE)/github.com/wberry-godaddy/switchboard-poc-natives"
           echo "Module cache contents:"; find "$MOD" -maxdepth 1
-          du -sh "$MOD"/* 2>/dev/null || true
-          test -d "$MOD/linux@v0.1.0" || { echo "::error::expected linux present"; exit 1; }
+          test -d "$MOD/linux@v0.2.1" || { echo "::error::expected linux present"; exit 1; }
           for wrong in linux-musl darwin windows; do
-            if [ -d "$MOD/$wrong@v0.1.0" ]; then
-              echo "::error::unexpected $wrong module was downloaded"; exit 1
-            fi
+            find "$MOD" -maxdepth 1 -name "$wrong@*" | grep -q . && { echo "::error::unexpected $wrong module was downloaded"; exit 1; }
           done
-          echo "PASS: only linux (15MB) was fetched"
+          OUT="$(/tmp/out)"
+          [ "$OUT" = "5" ] || { echo "::error::expected output 5, got $OUT"; exit 1; }
+          ldd /tmp/out | grep -q libnative.so || { echo "::error::expected dynamic link to libnative.so"; exit 1; }
+          echo "PASS: only linux module fetched; real dynamic cgo call returned 5"
 
-  linux-musl:
+  linux-musl-dynamic:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with: { go-version: "1.22" }
       - run: go build -tags musl -o /tmp/out .
-      - name: Assert only 'linux-musl' module present
+      - name: Assert module fetch + real dynamic execution
         run: |
           MOD="$(go env GOMODCACHE)/github.com/wberry-godaddy/switchboard-poc-natives"
           echo "Module cache contents:"; find "$MOD" -maxdepth 1
-          du -sh "$MOD"/* 2>/dev/null || true
-          test -d "$MOD/linux-musl@v0.1.0" || { echo "::error::expected linux-musl present"; exit 1; }
+          test -d "$MOD/linux-musl@v0.2.1" || { echo "::error::expected linux-musl present"; exit 1; }
           for wrong in linux darwin windows; do
-            if [ -d "$MOD/$wrong@v0.1.0" ]; then
-              echo "::error::unexpected $wrong module was downloaded"; exit 1
-            fi
+            find "$MOD" -maxdepth 1 -name "$wrong@*" | grep -q . && { echo "::error::unexpected $wrong module was downloaded"; exit 1; }
           done
-          echo "PASS: only linux-musl (20MB) was fetched"
+          OUT="$(/tmp/out)"
+          [ "$OUT" = "5" ] || { echo "::error::expected output 5, got $OUT"; exit 1; }
+          ldd /tmp/out | grep -q libnative.so || { echo "::error::expected dynamic link to libnative.so"; exit 1; }
+          echo "PASS: only linux-musl module fetched; real dynamic cgo call returned 5"
 
-  darwin:
+  # The critical case: this is the exact scenario #585 broke and #590
+  # restored (ld: cannot find -lffi_client when the static archive is
+  # missing) -- reproduced here through a dependency module's lib/ dir
+  # instead of the main module's own lib/ dir, to prove the multi-module
+  # restructuring does not reopen that regression.
+  linux-musl-static:
+    runs-on: ubuntu-latest
+    container: golang:1.22-alpine
+    steps:
+      - name: Install build tools
+        run: apk add --no-cache gcc musl-dev file
+      - uses: actions/checkout@v4
+      - run: |
+          go build -tags musl --ldflags '-linkmode external -extldflags "-static"' -o /tmp/out .
+      - name: Assert module fetch + real static execution
+        run: |
+          MOD="$(go env GOMODCACHE)/github.com/wberry-godaddy/switchboard-poc-natives"
+          echo "Module cache contents:"; find "$MOD" -maxdepth 1
+          test -d "$MOD/linux-musl@v0.2.1" || { echo "::error::expected linux-musl present"; exit 1; }
+          for wrong in linux darwin windows; do
+            find "$MOD" -maxdepth 1 -name "$wrong@*" | grep -q . && { echo "::error::unexpected $wrong module was downloaded"; exit 1; }
+          done
+          OUT="$(/tmp/out)"
+          [ "$OUT" = "5" ] || { echo "::error::expected output 5, got $OUT"; exit 1; }
+          file /tmp/out | grep -q "statically linked" || { echo "::error::expected a fully static binary"; exit 1; }
+          echo "PASS: only linux-musl module fetched; real STATIC cgo call returned 5; binary confirmed static"
+
+  darwin-dynamic:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with: { go-version: "1.22" }
       - run: go build -o /tmp/out .
-      - name: Assert only 'darwin' module present
+      - name: Assert module fetch + real dynamic execution
         run: |
           MOD="$(go env GOMODCACHE)/github.com/wberry-godaddy/switchboard-poc-natives"
           echo "Module cache contents:"; find "$MOD" -maxdepth 1
-          du -sh "$MOD"/* 2>/dev/null || true
-          test -d "$MOD/darwin@v0.1.0" || { echo "::error::expected darwin present"; exit 1; }
+          test -d "$MOD/darwin@v0.2.1" || { echo "::error::expected darwin present"; exit 1; }
           for wrong in linux linux-musl windows; do
-            if [ -d "$MOD/$wrong@v0.1.0" ]; then
-              echo "::error::unexpected $wrong module was downloaded"; exit 1
-            fi
+            find "$MOD" -maxdepth 1 -name "$wrong@*" | grep -q . && { echo "::error::unexpected $wrong module was downloaded"; exit 1; }
           done
-          echo "PASS: only darwin (25MB) was fetched"
+          OUT="$(/tmp/out)"
+          [ "$OUT" = "5" ] || { echo "::error::expected output 5, got $OUT"; exit 1; }
+          otool -L /tmp/out | grep -q libnative.dylib || { echo "::error::expected dynamic link to libnative.dylib"; exit 1; }
+          echo "PASS: only darwin module fetched; real dynamic cgo call returned 5"
 
-  windows:
+  windows-dynamic:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with: { go-version: "1.22" }
       - run: go build -o out.exe .
-      - name: Assert only 'windows' module present
+      - name: Assert module fetch + real dynamic execution
         shell: bash
         run: |
           MOD="$(go env GOMODCACHE)/github.com/wberry-godaddy/switchboard-poc-natives"
           echo "Module cache contents:"; find "$MOD" -maxdepth 1
-          du -sh "$MOD"/* 2>/dev/null || true
-          test -d "$MOD/windows@v0.1.0" || { echo "::error::expected windows present"; exit 1; }
+          test -d "$MOD/windows@v0.2.1" || { echo "::error::expected windows present"; exit 1; }
           for wrong in linux linux-musl darwin; do
-            if [ -d "$MOD/$wrong@v0.1.0" ]; then
-              echo "::error::unexpected $wrong module was downloaded"; exit 1
-            fi
+            find "$MOD" -maxdepth 1 -name "$wrong@*" | grep -q . && { echo "::error::unexpected $wrong module was downloaded"; exit 1; }
           done
-          echo "PASS: only windows (30MB) was fetched"
+          # native.dll has no rpath equivalent on Windows; it must be
+          # resolvable via PATH at runtime, mirroring the real repo's own CI
+          # step that prepends bin/x64-win32 to PATH.
+          cp "$MOD/windows@v0.2.1/lib/native.dll" .
+          OUT="$(./out.exe)"
+          [ "$OUT" = "5" ] || { echo "::error::expected output 5, got $OUT"; exit 1; }
+          echo "PASS: only windows module fetched; real dynamic cgo call returned 5"
 
   # Negative/control case: go mod tidy and go mod vendor are documented to
   # ignore build constraints ("act as if all build tags are enabled"), so
@@ -107,8 +141,7 @@ jobs:
         run: |
           MOD="$(go env GOMODCACHE)/github.com/wberry-godaddy/switchboard-poc-natives"
           echo "Module cache contents:"; find "$MOD" -maxdepth 1
-          du -sh "$MOD"/* 2>/dev/null || true
           for p in linux linux-musl darwin windows; do
-            test -d "$MOD/$p@v0.1.0" || { echo "::error::expected $p present after tidy"; exit 1; }
+            test -d "$MOD/$p@v0.2.1" || { echo "::error::expected $p present after tidy"; exit 1; }
           done
           echo "PASS (control case): tidy fetched all 4, as documented -- contrast with the build jobs above"

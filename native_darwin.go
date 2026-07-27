@@ -2,4 +2,6 @@
 
 package main
 
-import _ "github.com/wberry-godaddy/switchboard-poc-natives/darwin"
+import "github.com/wberry-godaddy/switchboard-poc-natives/darwin"
+
+func nativeAdd(a, b int) int { return darwin.Add(a, b) }
