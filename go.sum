@@ -1,0 +1,8 @@
+github.com/wberry-godaddy/switchboard-poc-natives/darwin v0.1.0 h1:8zD71OD2beJa/7pdBZZYSRrRaE2AIZKYHv/Vr2bo7cQ=
+github.com/wberry-godaddy/switchboard-poc-natives/darwin v0.1.0/go.mod h1:JyXVftMVrlRIT2q0B1bCbGTTiEvfxtLecPTyPFGzQn0=
+github.com/wberry-godaddy/switchboard-poc-natives/linux v0.1.0 h1:gKQSTsRiE67vooh1UtEyanxsi6mlaPd8HhYqV9siVUs=
+github.com/wberry-godaddy/switchboard-poc-natives/linux v0.1.0/go.mod h1:iKEB9chfiu885K054sQOfl8Lr5nbXhyrMAOuCTqRaCY=
+github.com/wberry-godaddy/switchboard-poc-natives/linux-musl v0.1.0 h1:cRRroQyXIpVaj0qBGWN0c1oecpN2PTGICwjsvquzwsE=
+github.com/wberry-godaddy/switchboard-poc-natives/linux-musl v0.1.0/go.mod h1:E/Zfkr4CzGF7YrxSp44VSNAy5HWl3Os/4gFcIttBrBc=
+github.com/wberry-godaddy/switchboard-poc-natives/windows v0.1.0 h1:o/tNz2Jio6AH8b9j1eKQ3GQvpuUFA/6cCE+hKeQCbgY=
+github.com/wberry-godaddy/switchboard-poc-natives/windows v0.1.0/go.mod h1:X3IxRSbkkNNvJm2/wxUenkX2bQ2xBYqASLvnF84GOtU=

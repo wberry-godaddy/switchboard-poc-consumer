@@ -1,0 +1,114 @@
+name: Selective native module fetch proof
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  # Each of these builds for one specific target from a totally fresh module
+  # cache (every GitHub Actions runner starts clean), then asserts that only
+  # the ONE matching native module (out of four: linux 15MB, linux-musl 20MB,
+  # darwin 25MB, windows 30MB) was actually downloaded into GOMODCACHE.
+  linux-default:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: "1.22" }
+      - run: go build -o /tmp/out .
+      - name: Assert only 'linux' module present
+        run: |
+          MOD="$(go env GOMODCACHE)/github.com/wberry-godaddy/switchboard-poc-natives"
+          echo "Module cache contents:"; find "$MOD" -maxdepth 1
+          du -sh "$MOD"/* 2>/dev/null || true
+          test -d "$MOD/linux@v0.1.0" || { echo "::error::expected linux present"; exit 1; }
+          for wrong in linux-musl darwin windows; do
+            if [ -d "$MOD/$wrong@v0.1.0" ]; then
+              echo "::error::unexpected $wrong module was downloaded"; exit 1
+            fi
+          done
+          echo "PASS: only linux (15MB) was fetched"
+
+  linux-musl:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: "1.22" }
+      - run: go build -tags musl -o /tmp/out .
+      - name: Assert only 'linux-musl' module present
+        run: |
+          MOD="$(go env GOMODCACHE)/github.com/wberry-godaddy/switchboard-poc-natives"
+          echo "Module cache contents:"; find "$MOD" -maxdepth 1
+          du -sh "$MOD"/* 2>/dev/null || true
+          test -d "$MOD/linux-musl@v0.1.0" || { echo "::error::expected linux-musl present"; exit 1; }
+          for wrong in linux darwin windows; do
+            if [ -d "$MOD/$wrong@v0.1.0" ]; then
+              echo "::error::unexpected $wrong module was downloaded"; exit 1
+            fi
+          done
+          echo "PASS: only linux-musl (20MB) was fetched"
+
+  darwin:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: "1.22" }
+      - run: go build -o /tmp/out .
+      - name: Assert only 'darwin' module present
+        run: |
+          MOD="$(go env GOMODCACHE)/github.com/wberry-godaddy/switchboard-poc-natives"
+          echo "Module cache contents:"; find "$MOD" -maxdepth 1
+          du -sh "$MOD"/* 2>/dev/null || true
+          test -d "$MOD/darwin@v0.1.0" || { echo "::error::expected darwin present"; exit 1; }
+          for wrong in linux linux-musl windows; do
+            if [ -d "$MOD/$wrong@v0.1.0" ]; then
+              echo "::error::unexpected $wrong module was downloaded"; exit 1
+            fi
+          done
+          echo "PASS: only darwin (25MB) was fetched"
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: "1.22" }
+      - run: go build -o out.exe .
+      - name: Assert only 'windows' module present
+        shell: bash
+        run: |
+          MOD="$(go env GOMODCACHE)/github.com/wberry-godaddy/switchboard-poc-natives"
+          echo "Module cache contents:"; find "$MOD" -maxdepth 1
+          du -sh "$MOD"/* 2>/dev/null || true
+          test -d "$MOD/windows@v0.1.0" || { echo "::error::expected windows present"; exit 1; }
+          for wrong in linux linux-musl darwin; do
+            if [ -d "$MOD/$wrong@v0.1.0" ]; then
+              echo "::error::unexpected $wrong module was downloaded"; exit 1
+            fi
+          done
+          echo "PASS: only windows (30MB) was fetched"
+
+  # Negative/control case: go mod tidy and go mod vendor are documented to
+  # ignore build constraints ("act as if all build tags are enabled"), so
+  # they fetch ALL FOUR native modules regardless of target. This contrasts
+  # deliberately with the jobs above to document that the selective-download
+  # win applies to `go build`/`go get`/`go mod download`, not to `tidy`/`vendor`.
+  tidy-control:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: "1.22" }
+      - run: go mod tidy
+      - name: Assert ALL FOUR modules present (expected, contrast case)
+        run: |
+          MOD="$(go env GOMODCACHE)/github.com/wberry-godaddy/switchboard-poc-natives"
+          echo "Module cache contents:"; find "$MOD" -maxdepth 1
+          du -sh "$MOD"/* 2>/dev/null || true
+          for p in linux linux-musl darwin windows; do
+            test -d "$MOD/$p@v0.1.0" || { echo "::error::expected $p present after tidy"; exit 1; }
+          done
+          echo "PASS (control case): tidy fetched all 4, as documented -- contrast with the build jobs above"
